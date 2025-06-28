@@ -19,8 +19,8 @@ require("lazy").setup({
     "neovim/nvim-lspconfig",
     dependencies = {
       -- Automatically install LSP servers
-      "williamboman/mason.nvim",
-      "williamboman/mason-lspconfig.nvim",
+      { "williamboman/mason.nvim", version = "1.11.0" },
+      { "williamboman/mason-lspconfig.nvim", version = "1.32.0" },
       -- Autocompletion plugin
       "hrsh7th/nvim-cmp",
       "hrsh7th/cmp-nvim-lsp",
