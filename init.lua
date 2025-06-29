@@ -170,7 +170,40 @@ require("lazy").setup({
     },
   },
 })
+-- ~/.config/nvim/init.lua
 
+-- Require your custom todo workflow module
+-- Neovim automatically looks in ~/.config/nvim/lua/
+local TodoWorkflow = require("todo_workflow")
+
+-- Define keymaps only when the todo.md file is active
+vim.api.nvim_create_autocmd("BufEnter", {
+    group = vim.api.nvim_create_augroup("TodoWorkflow", { clear = true }),
+    pattern = "*/todo.md", -- Adjust this pattern to your todo file path
+    callback = function()
+        -- Now we call the functions from our required module
+        vim.keymap.set("n", "xx", TodoWorkflow.finish_todo_item, { noremap = true, silent = true, buffer = true, desc = "Finish Todo Item" })
+        vim.keymap.set("n", "ni", TodoWorkflow.new_todo_item, { noremap = true, silent = true, buffer = true, desc = "New Todo Item" })
+        print("Todo workflow keymaps enabled for todo.md")
+    end,
+})
+
+-- You might also want to remove keymaps when leaving the buffer
+vim.api.nvim_create_autocmd("BufLeave", {
+    group = vim.api.nvim_create_augroup("TodoWorkflowLeave", { clear = true }),
+    pattern = "*/todo.md",
+    callback = function()
+        -- Setting buffer = true without a keymap will implicitly remove it
+        vim.keymap.del("n", "xx", { buffer = true })
+        vim.keymap.del("n", "ni", { buffer = true })
+        print("Todo workflow keymaps disabled.")
+    end,
+})
+
+-- Other general Neovim configuration can go here, e.g., options, other plugins, etc.
+-- vim.opt.tabstop = 4
+-- vim.opt.shiftwidth = 4
+-- etc.
 -- Basic Neovim Configuration (Runs after Plugins)
 -- Your colorscheme and options (these are working, keep them)
 vim.cmd('colorscheme industry')
