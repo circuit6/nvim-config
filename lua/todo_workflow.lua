@@ -80,7 +80,9 @@ end
 
 -- Function to handle finishing a todo item ("xx")
 function M.finish_todo_item()
-    local current_line_num = vim.api.nvim_win_get_cursor(0)[1] - 1 -- 0-indexed line
+    local original_cursor_pos = vim.api.nvim_win_get_cursor(0) -- Get original cursor position
+    local current_line_num = original_cursor_pos[1] - 1 -- 0-indexed line
+    local current_col_num = original_cursor_pos[2]
     local current_line = vim.api.nvim_get_current_line()
 
     -- 1. Check if the current line is an uncompleted task
@@ -136,6 +138,18 @@ function M.finish_todo_item()
     vim.api.nvim_buf_set_lines(0, 0, -1, false, buffer_lines)
 
     M.clean_up_structure() -- Call cleanup after modifications
+
+    -- Restore cursor position (adjust for line removal)
+    local new_line_count = vim.api.nvim_buf_line_count(0)
+    local new_cursor_line = math.min(current_line_num + 1, new_line_count) -- Adjust for removal
+    if new_cursor_line == 0 and new_line_count > 0 then new_cursor_line = 1 end -- Ensure cursor is at least on line 1 if file is not empty
+
+    -- If the line was removed and it was the last line, move cursor to the new last line
+    -- Otherwise, try to stay on the same line number (which will be a different line now)
+    -- or the line above if the original line was removed.
+    local line_at_new_pos = vim.api.nvim_buf_get_lines(0, new_cursor_line - 1, new_cursor_line, false)[1] or ""
+    local new_cursor_col = math.min(current_col_num, #line_at_new_pos)
+    vim.api.nvim_win_set_cursor(0, {new_cursor_line, new_cursor_col})
 
     print("Task finished and moved!")
 end
@@ -196,4 +210,5 @@ function M.new_todo_item()
     vim.cmd("startinsert") -- Enter Insert mode
 end
 
+-- This is crucial: return the module table so it can be required
 return M
