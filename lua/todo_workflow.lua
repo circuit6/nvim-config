@@ -19,6 +19,65 @@ function M.find_section_line(buffer_lines, section_header)
     return nil
 end
 
+--- Ensures consistent spacing around ## headers.
+--- Each ## header should have one empty line above it and one below it.
+function M.clean_up_structure()
+    local buffer_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false) -- Get all lines
+    local lines_to_write = {}
+    local line_count = #buffer_lines
+
+    for i = 1, line_count do
+        local current_line = buffer_lines[i]
+        local prev_line = buffer_lines[i - 1] or ""
+        local next_line = buffer_lines[i + 1] or ""
+
+        if current_line:match("^##%s.*") then -- Found a ## header
+            -- Add empty line above if not already present and not the very first line
+            if i > 1 and prev_line ~= "" then
+                table.insert(lines_to_write, "")
+            end
+
+            table.insert(lines_to_write, current_line)
+
+            -- Add empty line below if not already present and not the very last line
+            if i < line_count and next_line ~= "" then
+                table.insert(lines_to_write, "")
+            end
+        elseif current_line == "" and (prev_line == "" or next_line == "") then
+            -- Skip extra empty lines:
+            -- If current line is empty and previous line is also empty, skip current (unless it's a header spacing)
+            -- If current line is empty and next line is empty, skip current (unless it's a header spacing)
+            -- This logic prevents multiple consecutive empty lines, while still allowing header spacing.
+            local prev_is_header = prev_line:match("^##%s.*")
+            local next_is_header = next_line:match("^##%s.*")
+            local prev_is_empty = prev_line == ""
+            local next_is_empty = next_line == ""
+
+            if not ((prev_is_header and not next_is_empty) or (next_is_header and not prev_is_empty)) then
+                 if (prev_is_empty and not prev_is_header) or (next_is_empty and not next_is_header) then
+                    -- This empty line is redundant, skip it
+                 else
+                    table.insert(lines_to_write, current_line)
+                 end
+            else
+                table.insert(lines_to_write, current_line)
+            end
+        else
+            table.insert(lines_to_write, current_line)
+        end
+    end
+
+    -- Remove any trailing empty lines if they are not part of header spacing
+    while #lines_to_write > 0 and lines_to_write[#lines_to_write] == "" and
+          not lines_to_write[#lines_to_write - 1]:match("^##%s.*") do
+        table.remove(lines_to_write)
+    end
+
+    vim.api.nvim_buf_set_lines(0, 0, -1, false, lines_to_write)
+    print("Buffer structure cleaned up!")
+end
+
+
 -- Function to handle finishing a todo item ("xx")
 function M.finish_todo_item()
     local current_line_num = vim.api.nvim_win_get_cursor(0)[1] - 1 -- 0-indexed line
@@ -76,6 +135,8 @@ function M.finish_todo_item()
     -- 5. Update the buffer
     vim.api.nvim_buf_set_lines(0, 0, -1, false, buffer_lines)
 
+    M.clean_up_structure() -- Call cleanup after modifications
+
     print("Task finished and moved!")
 end
 
@@ -125,6 +186,8 @@ function M.new_todo_item()
     -- 3. Update the buffer
     vim.api.nvim_buf_set_lines(0, 0, -1, false, buffer_lines)
 
+    M.clean_up_structure() -- Call cleanup after modifications
+
     -- 4. Place cursor on the new line for editing
     -- The new line was inserted at `insertion_point_idx + 1`.
     -- So its 1-indexed row number is `insertion_point_idx + 1`.
@@ -133,5 +196,4 @@ function M.new_todo_item()
     vim.cmd("startinsert") -- Enter Insert mode
 end
 
--- This is crucial: return the module table so it can be required
 return M
