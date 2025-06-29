@@ -91,45 +91,45 @@ function M.new_todo_item()
         return
     end
 
-    -- Determine the actual insertion point (1-indexed for Lua table)
-    -- Start immediately after the "## Todos" header (1-indexed for Lua table `buffer_lines`)
-    local insertion_row_in_table = todos_section_line_num + 1
+    -- Determine the insertion point (1-indexed for Lua table)
+    -- We'll try to find the last OPEN todo item. If none, then right after the header.
+    local insertion_point_idx = todos_section_line_num + 1 -- Default to right after "## Todos" header
 
-    local found_existing_content = false
-    -- Iterate from the line *after* the "## Todos" header to find the true end of the section
+    local found_open_task = false
+    -- Iterate through lines STARTING FROM AFTER the "## Todos" header
     for i = todos_section_line_num + 1, #buffer_lines do
         local line = buffer_lines[i]
-        if line:match("^%s*%[%s*[ x]%s*%].*") then -- If it's a todo item (completed or not)
-            insertion_row_in_table = i
-            found_existing_content = true
-        elseif line:match("^##%s.*") then -- If it's another header, stop here, we found the boundary
+
+        -- If we encounter another header, we've gone past the "## Todos" section
+        if line:match("^##%s.*") then
             break
-        elseif line:match("^%s*$") then -- If it's a blank line
-            -- If we've already seen content in this section, then this blank line is part of it
-            if found_existing_content then
-                insertion_row_in_table = i
-            end
-            -- If `## Todos` is immediately followed by blank lines, we *don't* advance `insertion_row_in_table`
-            -- This ensures insertion right after the header if the section is truly empty or only has blank lines.
-        else -- If it's any other non-header, non-blank content (shouldn't happen in your format, but for robustness)
-            insertion_row_in_table = i
-            found_existing_content = true
         end
+
+        -- If it's an UNCOMPLETED task, update our potential insertion point
+        if line:match("^%s*%[%s*%]%s.*") then
+            insertion_point_idx = i -- This is the line of the open task
+            found_open_task = true
+        end
+        -- We continue iterating even after finding an open task,
+        -- to ensure we find the *last* open task.
     end
 
-    -- Now, `insertion_row_in_table` points to the last relevant line *within* the Todos section,
-    -- or the Todos header itself if it's empty (e.g., `## Todos` followed by `## Another Section`).
-    -- We want to insert *after* this line.
-    table.insert(buffer_lines, insertion_row_in_table + 1, "[ ] ")
+    -- After the loop, insertion_point_idx holds:
+    -- - The line number of the *last open task* if found.
+    -- - The line number of the `## Todos` header + 1 if no open tasks were found
+    --   within the section, meaning it's either empty or only has completed tasks.
+
+    -- Insert the new task line *after* the determined insertion_point_idx
+    table.insert(buffer_lines, insertion_point_idx + 1, "[ ] ")
 
     -- 3. Update the buffer
     vim.api.nvim_buf_set_lines(0, 0, -1, false, buffer_lines)
 
     -- 4. Place cursor on the new line for editing
-    -- The new line was inserted at `insertion_row_in_table + 1`.
-    -- So its 1-indexed row number is `insertion_row_in_table + 1`.
+    -- The new line was inserted at `insertion_point_idx + 1`.
+    -- So its 1-indexed row number is `insertion_point_idx + 1`.
     -- The column should be after "[ ] " (4 characters), so 5.
-    vim.api.nvim_win_set_cursor(0, {insertion_row_in_table + 1, 4}) -- Row, Col (Corrected)
+    vim.api.nvim_win_set_cursor(0, {insertion_point_idx + 1, 4}) -- Row, Col
     vim.cmd("startinsert") -- Enter Insert mode
 end
 
