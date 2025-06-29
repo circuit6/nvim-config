@@ -19,10 +19,6 @@ function M.find_section_line(buffer_lines, section_header)
     return nil
 end
 
--- ~/.config/nvim/lua/todo_workflow.lua
-
--- ... (M.get_current_date_header and M.find_section_line functions are the same) ...
-
 -- Function to handle finishing a todo item ("xx")
 function M.finish_todo_item()
     local current_line_num = vim.api.nvim_win_get_cursor(0)[1] - 1 -- 0-indexed line
@@ -45,92 +41,39 @@ function M.finish_todo_item()
     local date_header = M.get_current_date_header()
     local date_section_line_num = M.find_section_line(buffer_lines, date_header)
 
-    local target_insert_line_idx_0_indexed -- This will be the line *before* where the new task goes
-
     if not date_section_line_num then
-        -- Date section doesn't exist, create it.
+        -- Date section doesn't exist, create it above "## Todos" or at the end
         local todos_section_line_num = M.find_section_line(buffer_lines, "## Todos")
-        local new_date_section_start_line_idx_0_indexed
+        local insert_pos
 
         if todos_section_line_num then
-            -- Insert above ## Todos section
-            new_date_section_start_line_idx_0_indexed = todos_section_line_num
+            -- Insert above ## Todos section (or before "## Todos" content starts)
+            insert_pos = todos_section_line_num
         else
-            -- No ## Todos, find the last header or insert at the end of the file
-            new_date_section_start_line_idx_0_indexed = 0 -- Default to top if no headers.
+            -- No ## Todos, insert at the end of the file (or after # Todo Timothy if it's the only one)
+            insert_pos = 0 -- Default to top if no headers.
             for i = #buffer_lines, 1, -1 do
                 if buffer_lines[i]:match("^#%#?%s.*") then -- Find the last header
-                    new_date_section_start_line_idx_0_indexed = i
+                    insert_pos = i
                     break
                 end
             end
         end
 
-        -- Insert header
-        table.insert(buffer_lines, new_date_section_start_line_idx_0_indexed + 1, date_header)
-        -- The task will be inserted right after this header
-        target_insert_line_idx_0_indexed = new_date_section_start_line_idx_0_indexed + 1
-
+        -- Insert header, empty line, and the task
+        table.insert(buffer_lines, insert_pos + 1, date_header)
+        table.insert(buffer_lines, insert_pos + 2, "") -- Add an empty line for spacing
+        table.insert(buffer_lines, insert_pos + 3, completed_task_line)
     else
-        -- Date section already exists.
-        -- Find the last line within this date section.
-        local end_of_date_section_content_idx_0_indexed = date_section_line_num
-
-        -- Loop through lines after the date header until next header or EOF
-        for i = date_section_line_num + 1, #buffer_lines - 1 do -- -1 because buffer_lines is 1-indexed
-            local line = buffer_lines[i + 1] -- i+1 for 1-indexed access
-            if line:match("^##%s.*") then -- Next header found, stop
-                break
-            end
-            end_of_date_section_content_idx_0_indexed = i -- Update to current line if it's part of the section
+        -- Date section exists, insert the task below it
+        local insert_pos = date_section_line_num + 1 -- Start searching from here (after the date header)
+        while insert_pos < #buffer_lines and not buffer_lines[insert_pos + 1]:match("^##%s.*") do
+            insert_pos = insert_pos + 1
         end
-        target_insert_line_idx_0_indexed = end_of_date_section_content_idx_0_indexed
+        table.insert(buffer_lines, insert_pos + 1, completed_task_line)
     end
 
-    -- Now, insert the completed task at the determined position
-    table.insert(buffer_lines, target_insert_line_idx_0_indexed + 1, completed_task_line)
-
-
-    -- --- BLANK LINE INSERTION LOGIC (REFINED) ---
-    -- After inserting the completed task, let's determine if a blank line is needed
-    -- *after* the date section's content and *before* the next header.
-
-    -- Refresh buffer_lines after the insertion
-    buffer_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-
-    -- Find the line number of the date section header again (it might have shifted)
-    local actual_date_header_line_num = M.find_section_line(buffer_lines, date_header)
-
-    if actual_date_header_line_num then
-        local last_content_line_in_date_section_idx = actual_date_header_line_num
-        -- Find the actual last line of content (not blank, not header) in this date section
-        for i = actual_date_header_line_num + 1, #buffer_lines - 1 do
-            local line = buffer_lines[i + 1]
-            if line:match("^##%s.*") then -- Next header found, this is the end of the section
-                break
-            end
-            last_content_line_in_date_section_idx = i -- This line is part of the content
-        end
-
-        -- Check the line immediately after the last content line of the date section
-        local line_after_date_section_content_idx = last_content_line_in_date_section_idx + 1
-
-        -- Ensure it's within buffer bounds AND that it's a header AND the line before it is not blank
-        if line_after_date_section_content_idx <= #buffer_lines then
-            local next_line = buffer_lines[line_after_date_section_content_idx]
-            local line_before_next_header = buffer_lines[line_after_date_section_content_idx - 1]
-
-            if next_line:match("^##%s.*") and not line_before_next_header:match("^%s*$") then
-                 -- We are exactly before a header, and the previous line is not blank.
-                 -- Insert a blank line at this exact position.
-                table.insert(buffer_lines, line_after_date_section_content_idx, "")
-            end
-        end
-    end
-    -- --- END BLANK LINE LOGIC ---
-
-
-    -- 5. Update the buffer with all changes
+    -- 5. Update the buffer
     vim.api.nvim_buf_set_lines(0, 0, -1, false, buffer_lines)
 
     print("Task finished and moved!")
