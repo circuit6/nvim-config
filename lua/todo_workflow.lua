@@ -19,84 +19,9 @@ function M.find_section_line(buffer_lines, section_header)
     return nil
 end
 
---- Ensures consistent spacing around ## headers.
---- Each ## header should have one empty line above it and one below it.
---- Returns true if buffer was modified, false otherwise.
-function M.clean_up_structure()
-    local original_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false) -- Get all lines
-    local lines_to_write = {}
-    local line_count = #original_lines
-    local modified = false
-
-    for i = 1, line_count do
-        local current_line = original_lines[i]
-        local prev_line = original_lines[i - 1] or ""
-        local next_line = original_lines[i + 1] or ""
-
-        if current_line:match("^##%s.*") then -- Found a ## header
-            -- Add empty line above if not already present and not the very first line
-            if i > 1 and prev_line ~= "" then
-                table.insert(lines_to_write, "")
-                modified = true
-            end
-
-            table.insert(lines_to_write, current_line)
-
-            -- Add empty line below if not already present and not the very last line
-            if i < line_count and next_line ~= "" then
-                table.insert(lines_to_write, "")
-                modified = true
-            end
-        elseif current_line == "" then
-            -- Logic to remove redundant empty lines, but preserve those for header spacing
-            local prev_is_header = prev_line:match("^##%s.*")
-            local next_is_header = next_line:match("^##%s.*")
-            local prev_is_empty = prev_line == ""
-            local next_is_empty = next_line == ""
-
-            -- Only add this empty line if it's explicitly needed for header spacing,
-            -- or if it's not a consecutive empty line, and not next to a header that already has its spacing.
-            if (prev_is_header and not next_is_empty) or (next_is_header and not prev_is_empty) then
-                -- This empty line is serving as spacing for a header
-                table.insert(lines_to_write, current_line)
-            elseif not prev_is_empty then -- If previous line is NOT empty, we can add this empty line
-                table.insert(lines_to_write, current_line)
-            else
-                -- This is a redundant empty line, do not add it
-                modified = true
-            end
-        else
-            table.insert(lines_to_write, current_line)
-        end
-    end
-
-    -- Final pass to ensure no trailing empty lines unless they are header spacing
-    while #lines_to_write > 0 and lines_to_write[#lines_to_write] == "" do
-        if #lines_to_write > 1 and lines_to_write[#lines_to_write - 1]:match("^##%s.*") then
-            -- This empty line is below a header, so keep it for spacing
-            break
-        else
-            table.remove(lines_to_write)
-            modified = true
-        end
-    end
-
-    -- Compare final lines_to_write with original_lines to avoid unnecessary buffer writes
-    if modified or #original_lines ~= #lines_to_write then
-        vim.api.nvim_buf_set_lines(0, 0, -1, false, lines_to_write)
-        print("Buffer structure cleaned up!")
-        return true
-    end
-    print("No structure cleanup needed.")
-    return false
-end
-
-
 -- Function to handle finishing a todo item ("xx")
 function M.finish_todo_item()
-    local original_cursor_pos = vim.api.nvim_win_get_cursor(0) -- Get original cursor position
-    local current_line_num = original_cursor_pos[1] - 1 -- 0-indexed line
-    local current_col_num = original_cursor_pos[2]
+    local current_line_num = vim.api.nvim_win_get_cursor(0)[1] - 1 -- 0-indexed line
     local current_line = vim.api.nvim_get_current_line()
 
     -- 1. Check if the current line is an uncompleted task
@@ -126,7 +51,13 @@ function M.finish_todo_item()
             insert_pos = todos_section_line_num
         else
             -- No ## Todos, insert at the end of the file (or after # Todo Timothy if it's the only one)
-            insert_pos = #buffer_lines -- Insert at the very end
+            insert_pos = 0 -- Default to top if no headers.
+            for i = #buffer_lines, 1, -1 do
+                if buffer_lines[i]:match("^#%#?%s.*") then -- Find the last header
+                    insert_pos = i
+                    break
+                end
+            end
         end
 
         -- Insert header, empty line, and the task
@@ -145,45 +76,14 @@ function M.finish_todo_item()
     -- 5. Update the buffer
     vim.api.nvim_buf_set_lines(0, 0, -1, false, buffer_lines)
 
-    -- Capture new buffer state to correctly adjust cursor
-    local post_edit_line_count = vim.api.nvim_buf_line_count(0)
-
-    -- Calculate the target line for the cursor after deletion
-    -- If the line removed was the last line, move to the new last line.
-    -- Otherwise, try to stay on the same line number (which will be a different line now).
-    local target_line_num_0_indexed = math.min(current_line_num, post_edit_line_count - 1)
-    if target_line_num_0_indexed < 0 then target_line_num_0_indexed = 0 end -- Ensure it's not negative
-
-    -- Perform cleanup *after* the primary buffer modification but *before* setting the final cursor.
-    -- We need to re-evaluate the cursor position after cleanup as well.
-    M.clean_up_structure()
-
-    -- Re-get lines after cleanup as cleanup might have added/removed lines
-    local final_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-    local final_line_count = #final_lines
-
-    -- Adjust cursor after cleanup based on its original position.
-    -- The most robust way is to try and move to the line that *replaced* the old one,
-    -- or the line immediately above it if the previous line was the only content.
-    local new_cursor_row = math.min(target_line_num_0_indexed + 1, final_line_count)
-    if new_cursor_row == 0 and final_line_count > 0 then new_cursor_row = 1 end -- Ensure cursor is at least on line 1 if file is not empty
-
-    local line_content_at_new_pos = final_lines[new_cursor_row] or ""
-    local new_cursor_col = math.min(current_col_num, #line_content_at_new_pos)
-
-    vim.api.nvim_win_set_cursor(0, {new_cursor_row, new_cursor_col})
-
     print("Task finished and moved!")
 end
 
 -- Function to handle creating a new todo item ("ni")
 function M.new_todo_item()
-    -- 1. Perform cleanup first to stabilize line numbers.
-    M.clean_up_structure()
+    local buffer_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false) -- Get all lines
 
-    local buffer_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false) -- Get all lines after cleanup
-
-    -- 2. Find the ## Todos section on the (potentially new) buffer.
+    -- 1. Find the ## Todos section
     local todos_section_line_num = M.find_section_line(buffer_lines, "## Todos")
 
     if not todos_section_line_num then
@@ -192,8 +92,10 @@ function M.new_todo_item()
     end
 
     -- Determine the insertion point (1-indexed for Lua table)
+    -- We'll try to find the last OPEN todo item. If none, then right after the header.
     local insertion_point_idx = todos_section_line_num + 1 -- Default to right after "## Todos" header
 
+    local found_open_task = false
     -- Iterate through lines STARTING FROM AFTER the "## Todos" header
     for i = todos_section_line_num + 1, #buffer_lines do
         local line = buffer_lines[i]
@@ -206,10 +108,16 @@ function M.new_todo_item()
         -- If it's an UNCOMPLETED task, update our potential insertion point
         if line:match("^%s*%[%s*%]%s.*") then
             insertion_point_idx = i -- This is the line of the open task
+            found_open_task = true
         end
         -- We continue iterating even after finding an open task,
         -- to ensure we find the *last* open task.
     end
+
+    -- After the loop, insertion_point_idx holds:
+    -- - The line number of the *last open task* if found.
+    -- - The line number of the `## Todos` header + 1 if no open tasks were found
+    --   within the section, meaning it's either empty or only has completed tasks.
 
     -- Insert the new task line *after* the determined insertion_point_idx
     table.insert(buffer_lines, insertion_point_idx + 1, "[ ] ")
