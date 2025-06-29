@@ -91,25 +91,45 @@ function M.new_todo_item()
         return
     end
 
-    -- 2. Determine insertion point (at the end of the Todos section, before next '##' or EOF)
-    local insert_pos = todos_section_line_num + 1 -- Start after the "## Todos" header
+    -- Determine the actual insertion point (1-indexed for Lua table)
+    -- Start immediately after the "## Todos" header (1-indexed for Lua table `buffer_lines`)
+    local insertion_row_in_table = todos_section_line_num + 1
 
-    -- Find the end of the ## Todos section
-    while insert_pos < #buffer_lines and not buffer_lines[insert_pos + 1]:match("^##%s.*") do
-        insert_pos = insert_pos + 1
+    local found_existing_content = false
+    -- Iterate from the line *after* the "## Todos" header to find the true end of the section
+    for i = todos_section_line_num + 1, #buffer_lines do
+        local line = buffer_lines[i]
+        if line:match("^%s*%[%s*[ x]%s*%].*") then -- If it's a todo item (completed or not)
+            insertion_row_in_table = i
+            found_existing_content = true
+        elseif line:match("^##%s.*") then -- If it's another header, stop here, we found the boundary
+            break
+        elseif line:match("^%s*$") then -- If it's a blank line
+            -- If we've already seen content in this section, then this blank line is part of it
+            if found_existing_content then
+                insertion_row_in_table = i
+            end
+            -- If `## Todos` is immediately followed by blank lines, we *don't* advance `insertion_row_in_table`
+            -- This ensures insertion right after the header if the section is truly empty or only has blank lines.
+        else -- If it's any other non-header, non-blank content (shouldn't happen in your format, but for robustness)
+            insertion_row_in_table = i
+            found_existing_content = true
+        end
     end
 
-    -- Insert the new task line
-    table.insert(buffer_lines, insert_pos + 1, "[ ] ")
+    -- Now, `insertion_row_in_table` points to the last relevant line *within* the Todos section,
+    -- or the Todos header itself if it's empty (e.g., `## Todos` followed by `## Another Section`).
+    -- We want to insert *after* this line.
+    table.insert(buffer_lines, insertion_row_in_table + 1, "[ ] ")
 
     -- 3. Update the buffer
     vim.api.nvim_buf_set_lines(0, 0, -1, false, buffer_lines)
 
     -- 4. Place cursor on the new line for editing
-    -- Lua tables are 1-indexed, so insert_pos + 2 for the new line's buffer index.
-    -- nvim_win_set_cursor takes 1-indexed row, and column.
+    -- The new line was inserted at `insertion_row_in_table + 1`.
+    -- So its 1-indexed row number is `insertion_row_in_table + 1`.
     -- The column should be after "[ ] " (4 characters), so 5.
-    vim.api.nvim_win_set_cursor(0, {insert_pos + 2, 4}) -- Row, Col
+    vim.api.nvim_win_set_cursor(0, {insertion_row_in_table + 1, 4}) -- Row, Col (Corrected)
     vim.cmd("startinsert") -- Enter Insert mode
 end
 
