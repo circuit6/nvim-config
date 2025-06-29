@@ -172,15 +172,22 @@ require("lazy").setup({
 })
 -- ~/.config/nvim/init.lua
 
--- Define an augroup for your todo autocommands (keep this here)
+-- =========================================================================
+--  Todo Workflow Module Integration
+-- =========================================================================
+
+-- Define an augroup for your todo autocommands
+-- This helps clear and manage related autocommands cleanly.
 vim.api.nvim_create_augroup("TodoWorkflowCleanup", { clear = true })
 
--- Autocommand to run cleanup before saving specific todo files (keep this here)
+-- Autocommand to run cleanup before saving specific todo files
+-- This ensures your todo file is formatted correctly on save.
+-- IMPORTANT: Adjust the 'pattern' to match your actual todo file names/types.
 vim.api.nvim_create_autocmd("BufWritePre", {
     group = "TodoWorkflowCleanup",
-    pattern = { "*.md", "todo.txt", "tasks.txt" }, -- Adjust this pattern as needed
+    pattern = { "*.md", "todo.txt", "tasks.txt" }, -- Example patterns. Modify as needed!
     callback = function()
-        -- Ensure the todo_workflow module is loaded and the function exists
+        -- Safely attempt to load the module and call the cleanup function
         if pcall(require, 'todo_workflow') then
             local M = require('todo_workflow')
             if type(M.clean_up_structure) == 'function' then
@@ -191,26 +198,32 @@ vim.api.nvim_create_autocmd("BufWritePre", {
     desc = "Clean up todo file structure before saving",
 })
 
----
-## Set up custom commands and keymaps on VimEnter
----
--- Use an autocmd that fires after Neovim has fully initialized
--- This ensures that your 'todo_workflow' module is fully loaded and available.
+-- =========================================================================
+--  Define Custom Commands and Keymaps (on VimEnter)
+-- =========================================================================
+-- This autocommand ensures that your custom commands and keymaps are
+-- defined AFTER Neovim has fully initialized and all plugins are loaded.
+-- This prevents issues where 'todo_workflow' might not be fully available yet.
 vim.api.nvim_create_autocmd("VimEnter", {
-    group = "TodoWorkflowCleanup", -- Use the same augroup
+    group = "TodoWorkflowCleanup", -- Re-use the same augroup
     callback = function()
-        -- It's safer to re-require inside the callback to ensure it's fresh
-        -- or at least to confirm it's loaded before defining commands.
+        -- Re-require the module inside the callback to ensure it's loaded
+        -- at the time the commands are being defined.
         if pcall(require, 'todo_workflow') then
-            local M = require('todo_workflow') -- Now 'M' should contain your functions
+            local M = require('todo_workflow')
 
             -- Define Neovim user commands for your functions
+            -- You can now use :Ni and :Xx in command mode
             vim.cmd('command! Ni lua require("todo_workflow").new_todo_item()')
             vim.cmd('command! Xx lua require("todo_workflow").finish_todo_item()')
 
+            -- Optionally, define keymaps for convenience
+            -- Example: `<leader>ni` and `<leader>xx` in normal mode
+            vim.keymap.set('n', '<leader>ni', '<cmd>Ni<CR>', { desc = 'New Todo Item' })
+            vim.keymap.set('n', '<leader>xx', '<cmd>Xx<CR>', { desc = 'Finish Todo Item' })
         else
-            -- Optional: print an error if the module couldn't be loaded even on VimEnter
-            vim.notify("Error: 'todo_workflow' module could not be loaded for commands.", vim.log.levels.ERROR)
+            -- Optional: notify if the module failed to load even on VimEnter
+            vim.notify("Error: 'todo_workflow' module could not be loaded for commands.", vim.log.levels.ERROR, { title = "Todo Workflow" })
         end
     end,
     desc = "Define custom todo commands and keymaps after Vim initializes",
