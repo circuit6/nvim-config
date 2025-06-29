@@ -172,32 +172,28 @@ require("lazy").setup({
 })
 -- ~/.config/nvim/init.lua
 
--- Require your custom todo workflow module
--- Neovim automatically looks in ~/.config/nvim/lua/
-local TodoWorkflow = require("todo_workflow")
+local todo_workflow = require('todo_workflow')
 
--- Define keymaps only when the todo.md file is active
-vim.api.nvim_create_autocmd("BufEnter", {
-    group = vim.api.nvim_create_augroup("TodoWorkflow", { clear = true }),
-    pattern = "*/todo.md", -- Adjust this pattern to your todo file path
-    callback = function()
-        -- Now we call the functions from our required module
-        vim.keymap.set("n", "xx", TodoWorkflow.finish_todo_item, { noremap = true, silent = true, buffer = true, desc = "Finish Todo Item" })
-        vim.keymap.set("n", "ni", TodoWorkflow.new_todo_item, { noremap = true, silent = true, buffer = true, desc = "New Todo Item" })
-        print("Todo workflow keymaps enabled for todo.md")
-    end,
-})
+-- Define an augroup for your todo autocommands
+vim.api.nvim_create_augroup("TodoWorkflowCleanup", { clear = true })
 
--- You might also want to remove keymaps when leaving the buffer
-vim.api.nvim_create_autocmd("BufLeave", {
-    group = vim.api.nvim_create_augroup("TodoWorkflowLeave", { clear = true }),
-    pattern = "*/todo.md",
+-- Autocommand to run cleanup before saving specific todo files
+-- You might want to adjust the pattern for your todo files
+-- Common patterns: "*.md", "*.txt", or specific filenames like "todo.txt", "notes.md"
+-- Or you might target a specific filetype: "filetype=markdown"
+vim.api.nvim_create_autocmd("BufWritePre", {
+    group = "TodoWorkflowCleanup",
+    pattern = { "*.md", "todo.txt", "tasks.txt" }, -- Adjust this pattern to match your todo files
     callback = function()
-        -- Setting buffer = true without a keymap will implicitly remove it
-        vim.keymap.del("n", "xx", { buffer = true })
-        vim.keymap.del("n", "ni", { buffer = true })
-        print("Todo workflow keymaps disabled.")
+        -- Ensure the todo_workflow module is loaded and the function exists
+        if pcall(require, 'todo_workflow') then
+            local M = require('todo_workflow')
+            if type(M.clean_up_structure) == 'function' then
+                M.clean_up_structure()
+            end
+        end
     end,
+    desc = "Clean up todo file structure before saving",
 })
 
 -- Other general Neovim configuration can go here, e.g., options, other plugins, etc.
