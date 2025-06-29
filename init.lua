@@ -172,61 +172,32 @@ require("lazy").setup({
 })
 -- ~/.config/nvim/init.lua
 
--- =========================================================================
---  Todo Workflow Module Integration
--- =========================================================================
+-- Require your custom todo workflow module
+-- Neovim automatically looks in ~/.config/nvim/lua/
+local TodoWorkflow = require("todo_workflow")
 
--- Define an augroup for your todo autocommands
--- This helps clear and manage related autocommands cleanly.
-vim.api.nvim_create_augroup("TodoWorkflowCleanup", { clear = true })
-
--- Autocommand to run cleanup before saving specific todo files
--- This ensures your todo file is formatted correctly on save.
--- IMPORTANT: Adjust the 'pattern' to match your actual todo file names/types.
-vim.api.nvim_create_autocmd("BufWritePre", {
-    group = "TodoWorkflowCleanup",
-    pattern = { "*.md", "todo.txt", "tasks.txt" }, -- Example patterns. Modify as needed!
+-- Define keymaps only when the todo.md file is active
+vim.api.nvim_create_autocmd("BufEnter", {
+    group = vim.api.nvim_create_augroup("TodoWorkflow", { clear = true }),
+    pattern = "*/todo.md", -- Adjust this pattern to your todo file path
     callback = function()
-        -- Safely attempt to load the module and call the cleanup function
-        if pcall(require, 'todo_workflow') then
-            local M = require('todo_workflow')
-            if type(M.clean_up_structure) == 'function' then
-                M.clean_up_structure()
-            end
-        end
+        -- Now we call the functions from our required module
+        vim.keymap.set("n", "xx", TodoWorkflow.finish_todo_item, { noremap = true, silent = true, buffer = true, desc = "Finish Todo Item" })
+        vim.keymap.set("n", "ni", TodoWorkflow.new_todo_item, { noremap = true, silent = true, buffer = true, desc = "New Todo Item" })
+        print("Todo workflow keymaps enabled for todo.md")
     end,
-    desc = "Clean up todo file structure before saving",
 })
 
--- =========================================================================
---  Define Custom Commands and Keymaps (on VimEnter)
--- =========================================================================
--- This autocommand ensures that your custom commands and keymaps are
--- defined AFTER Neovim has fully initialized and all plugins are loaded.
--- This prevents issues where 'todo_workflow' might not be fully available yet.
-vim.api.nvim_create_autocmd("VimEnter", {
-    group = "TodoWorkflowCleanup", -- Re-use the same augroup
+-- You might also want to remove keymaps when leaving the buffer
+vim.api.nvim_create_autocmd("BufLeave", {
+    group = vim.api.nvim_create_augroup("TodoWorkflowLeave", { clear = true }),
+    pattern = "*/todo.md",
     callback = function()
-        -- Re-require the module inside the callback to ensure it's loaded
-        -- at the time the commands are being defined.
-        if pcall(require, 'todo_workflow') then
-            local M = require('todo_workflow')
-
-            -- Define Neovim user commands for your functions
-            -- You can now use :Ni and :Xx in command mode
-            vim.cmd('command! Ni lua require("todo_workflow").new_todo_item()')
-            vim.cmd('command! Xx lua require("todo_workflow").finish_todo_item()')
-
-            -- Optionally, define keymaps for convenience
-            -- Example: `<leader>ni` and `<leader>xx` in normal mode
-            vim.keymap.set('n', '<leader>ni', '<cmd>Ni<CR>', { desc = 'New Todo Item' })
-            vim.keymap.set('n', '<leader>xx', '<cmd>Xx<CR>', { desc = 'Finish Todo Item' })
-        else
-            -- Optional: notify if the module failed to load even on VimEnter
-            vim.notify("Error: 'todo_workflow' module could not be loaded for commands.", vim.log.levels.ERROR, { title = "Todo Workflow" })
-        end
+        -- Setting buffer = true without a keymap will implicitly remove it
+        vim.keymap.del("n", "xx", { buffer = true })
+        vim.keymap.del("n", "ni", { buffer = true })
+        print("Todo workflow keymaps disabled.")
     end,
-    desc = "Define custom todo commands and keymaps after Vim initializes",
 })
 
 -- Other general Neovim configuration can go here, e.g., options, other plugins, etc.
