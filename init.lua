@@ -196,6 +196,12 @@ vim.api.nvim_create_autocmd("BufWritePre", {
     desc = "Clean up todo file structure before saving",
 })
 
+-- This is the crucial part that seems to be missing or commented out:
+-- Define Neovim user commands for your functions
+vim.cmd('command! Ni lua require("todo_workflow").new_todo_item()')
+vim.cmd('command! Xx lua require("todo_workflow").finish_todo_item()')
+
+
 -- Other general Neovim configuration can go here, e.g., options, other plugins, etc.
 -- vim.opt.tabstop = 4
 -- vim.opt.shiftwidth = 4
