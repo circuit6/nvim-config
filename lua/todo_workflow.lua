@@ -157,7 +157,9 @@ end
 
 -- Function to handle creating a new todo item ("ni")
 function M.new_todo_item()
-    local buffer_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false) -- Get all lines
+    -- IMPORTANT: Re-get buffer_lines here to ensure we have the most current state
+    -- especially since clean_up_structure is no longer called before this.
+    local buffer_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
 
     -- 1. Find the ## Todos section
     local todos_section_line_num = M.find_section_line(buffer_lines, "## Todos")
