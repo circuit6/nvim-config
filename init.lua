@@ -1,4 +1,3 @@
--- This is the lazy.nvim bootstrap code. It *must* be at the top of your init.lua
 local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
 if not vim.loop.fs_stat(lazypath) then
   vim.fn.system({
@@ -145,12 +144,12 @@ require("lazy").setup({
     config = function()
       require("nvim-autopairs").setup()
       -- Integrate with nvim-cmp for smoother completion confirmation
-      local cmp_autopairs = require('nvim-autopairs.cmp')
-      local cmp = require('cmp')
-      cmp.event:on(
-        'confirm_done',
-        cmp_autopairs.on_confirm_done()
-      )
+      -- local cmp_autopairs = require('nvim-autopairs.cmp')
+      -- local cmp = require('cmp')
+      -- cmp.event:on(
+      --   'confirm_done',
+      --   cmp_autopairs.on_confirm_done()
+      -- )
     end
   },
 }, {
