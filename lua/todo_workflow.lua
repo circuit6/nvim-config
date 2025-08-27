@@ -19,25 +19,85 @@ function M.find_section_line(buffer_lines, section_header)
     return nil
 end
 
--- Function to handle finishing a todo item ("xx")
+-- Finishes a plain todo or ticks a habit count.
+-- Behaviour:
+-- - If line is "[N] ..." with N>1: decrement to [N-1] in place
+-- - If line is "[1] ..." (or 0/invalid): convert to [x] and move to today's section
+-- - If line is "[ ] ...": convert to [x] and move to today's section
 function M.finish_todo_item()
     local current_line_num = vim.api.nvim_win_get_cursor(0)[1] - 1 -- 0-indexed line
     local current_line = vim.api.nvim_get_current_line()
 
-    -- 1. Check if the current line is an uncompleted task
-    if not current_line:match("^%s*%[%s*%]%s.*") then
-        print("Not an uncompleted task. Cursor must be on a '[ ]' item.")
+    -- 1. If it's a habit line like "[N] ..." then tick/decrement first
+    local habit_count_str = current_line:match("^%s*%[(%d+)%]%s.*")
+    if habit_count_str then
+        local habit_count = tonumber(habit_count_str) or 0
+        if habit_count > 1 then
+            -- Decrement in place
+            local updated_line = current_line:gsub("%[(%d+)%]", "[" .. tostring(habit_count - 1) .. "]", 1)
+            vim.api.nvim_set_current_line(updated_line)
+
+            -- Also log a completion entry for today without removing from Todos
+            local completed_task_line_for_log = current_line:gsub("%b[]", "[x]", 1)
+            local buffer_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+
+            local date_header = M.get_current_date_header()
+            local date_section_line_num = M.find_section_line(buffer_lines, date_header)
+
+            if not date_section_line_num then
+                -- Create today's section above "## Todos" or after the last header
+                local todos_section_line_num = M.find_section_line(buffer_lines, "## Todos")
+                local insert_pos
+                if todos_section_line_num then
+                    insert_pos = todos_section_line_num
+                else
+                    insert_pos = 0
+                    for i = #buffer_lines, 1, -1 do
+                        if buffer_lines[i]:match("^#%#?%s.*") then
+                            insert_pos = i
+                            break
+                        end
+                    end
+                end
+                table.insert(buffer_lines, insert_pos + 1, date_header)
+                table.insert(buffer_lines, insert_pos + 2, "")
+                table.insert(buffer_lines, insert_pos + 3, completed_task_line_for_log)
+            else
+                -- Append under existing today's section
+                local insert_pos = date_section_line_num + 1
+                while insert_pos < #buffer_lines and not buffer_lines[insert_pos + 1]:match("^##%s.*") do
+                    insert_pos = insert_pos + 1
+                end
+                table.insert(buffer_lines, insert_pos + 1, completed_task_line_for_log)
+            end
+
+            vim.api.nvim_buf_set_lines(0, 0, -1, false, buffer_lines)
+
+            print("Habit ticked and logged: " .. tostring(habit_count - 1) .. " remaining")
+            return
+        end
+        -- Count is 1 (or invalid/0): finalize as completed and move below (falls through)
+    end
+
+    -- 2. Check if the current line is an uncompleted plain task or a habit reaching completion
+    if not current_line:match("^%s*%[%s*%]%s.*") and not habit_count_str then
+        print("Not a todo/habit item. Place cursor on a '[ ]' or '[N]' line.")
         return
     end
 
-    -- 2. Mark as completed and store it
-    local completed_task_line = current_line:gsub("%[%s*%]", "[x]")
+    -- 3. Mark as completed and store it
+    local completed_task_line
+    if habit_count_str then
+        completed_task_line = current_line:gsub("%b[]", "[x]", 1)
+    else
+        completed_task_line = current_line:gsub("%[%s*%]", "[x]")
+    end
     local buffer_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false) -- Get all lines
 
-    -- 3. Remove the task from its current position
+    -- 4. Remove the task from its current position
     table.remove(buffer_lines, current_line_num + 1) -- Lua tables are 1-indexed
 
-    -- 4. Find or create the ## <Current Date> section
+    -- 5. Find or create the ## <Current Date> section
     local date_header = M.get_current_date_header()
     local date_section_line_num = M.find_section_line(buffer_lines, date_header)
 
@@ -73,7 +133,7 @@ function M.finish_todo_item()
         table.insert(buffer_lines, insert_pos + 1, completed_task_line)
     end
 
-    -- 5. Update the buffer
+    -- 6. Update the buffer
     vim.api.nvim_buf_set_lines(0, 0, -1, false, buffer_lines)
 
     print("Task finished and moved!")
@@ -131,6 +191,42 @@ function M.new_todo_item()
     -- The column should be after "[ ] " (4 characters), so 5.
     vim.api.nvim_win_set_cursor(0, {insertion_point_idx + 1, 4}) -- Row, Col
     vim.cmd("startinsert") -- Enter Insert mode
+end
+
+-- Function to handle creating a new habit item ("nh") with default count 16
+function M.new_habit_item()
+    local buffer_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+
+    -- 1. Find the ## Todos section
+    local todos_section_line_num = M.find_section_line(buffer_lines, "## Todos")
+
+    if not todos_section_line_num then
+        print("Error: '## Todos' section not found. Please create it first.")
+        return
+    end
+
+    -- Determine insertion point after the last open item within the Todos section
+    local insertion_point_idx = todos_section_line_num + 1
+    for i = todos_section_line_num + 1, #buffer_lines do
+        local line = buffer_lines[i]
+        if line:match("^##%s.*") then
+            break
+        end
+        if line:match("^%s*%[%s*%]%s.*") or line:match("^%s*%[(%d+)%]%s.*") then
+            insertion_point_idx = i
+        end
+    end
+
+    -- 2. Insert new habit with default 16 ticks remaining
+    local head = "[16] "
+    table.insert(buffer_lines, insertion_point_idx + 1, head)
+
+    -- 3. Update buffer
+    vim.api.nvim_buf_set_lines(0, 0, -1, false, buffer_lines)
+
+    -- 4. Place cursor to start typing the habit title
+    vim.api.nvim_win_set_cursor(0, { insertion_point_idx + 1, #head })
+    vim.cmd("startinsert")
 end
 
 -- This is crucial: return the module table so it can be required

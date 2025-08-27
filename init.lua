@@ -30,11 +30,14 @@ require("lazy").setup({
     },
     config = function()
       -- Configure Mason to install LSP servers
-      require("mason").setup()
+      require("mason").setup({
+        PATH = "prepend", -- Ensure Mason's binaries are in PATH
+      })
       require("mason-lspconfig").setup({
         -- list of servers to ensure are installed
         ensure_installed = {
           "gopls",  -- Go Language Server
+          "pyright", -- Python Language Server
         },
       })
 
@@ -120,11 +123,20 @@ require("lazy").setup({
         },
       })
 
-      -- Removed Python LSP (pyright) setup for now
-      -- lspconfig.pyright.setup({
-      --   on_attach = on_attach,
-      --   capabilities = capabilities,
-      -- })
+      -- Setup pyright (Python Language Server)
+      lspconfig.pyright.setup({
+        on_attach = on_attach,
+        capabilities = capabilities,
+        settings = {
+          python = {
+            analysis = {
+              autoSearchPaths = true,
+              useLibraryCodeForTypes = true,
+              diagnosticMode = "workspace",
+            },
+          },
+        },
+      })
     end,
   },
 
@@ -155,7 +167,7 @@ require("lazy").setup({
 }, {
   -- Options for lazy.nvim itself (optional, but good to have)
   install = { colorscheme = { "habamax" } }, -- set a basic colorscheme during installation
-  checker = { enabled = true },             -- automatically check for plugin updates
+  checker = { enabled = false },            -- disable automatic plugin update notifications
   performance = {
     rtp = {
       -- disable some vim plugins
@@ -182,8 +194,9 @@ vim.api.nvim_create_autocmd("BufEnter", {
     pattern = "*/todo.md", -- Adjust this pattern to your todo file path
     callback = function()
         -- Now we call the functions from our required module
-        vim.keymap.set("n", "xx", TodoWorkflow.finish_todo_item, { noremap = true, silent = true, buffer = true, desc = "Finish Todo Item" })
+        vim.keymap.set("n", "xx", TodoWorkflow.finish_todo_item, { noremap = true, silent = true, buffer = true, desc = "Finish / Tick Todo/Habit" })
         vim.keymap.set("n", "ni", TodoWorkflow.new_todo_item, { noremap = true, silent = true, buffer = true, desc = "New Todo Item" })
+        vim.keymap.set("n", "nh", TodoWorkflow.new_habit_item, { noremap = true, silent = true, buffer = true, desc = "New Habit Item [16]" })
         print("Todo workflow keymaps enabled for todo.md")
     end,
 })
@@ -196,6 +209,7 @@ vim.api.nvim_create_autocmd("BufLeave", {
         -- Setting buffer = true without a keymap will implicitly remove it
         vim.keymap.del("n", "xx", { buffer = true })
         vim.keymap.del("n", "ni", { buffer = true })
+        vim.keymap.del("n", "nh", { buffer = true })
         print("Todo workflow keymaps disabled.")
     end,
 })
@@ -239,8 +253,9 @@ vim.cmd([[
 ]])
 
 
--- Auto-formatting on save for Go files (keep this for formatting)
+-- Auto-formatting on save for Go and Python files
 vim.cmd('autocmd BufWritePre *.go lua vim.lsp.buf.format({ async = true })')
+vim.cmd('autocmd BufWritePre *.py lua vim.lsp.buf.format({ async = true })')
 
 -- Normal mode mappings
 -- Use 'noremap = true' to prevent recursive remapping
